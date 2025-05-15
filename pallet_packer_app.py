@@ -117,6 +117,19 @@ st.title("📦 Palletization Tool (FBA Wise)")
 st.write("Upload an Excel or CSV file containing FBA carton data.")
 
 uploaded_file = st.file_uploader("Upload File", type=["xlsx", "csv"])
+template = pd.DataFrame(columns=['FBA Code','# of Cartons','Length','Width','Height'])
+
+template_io = BytesIO()
+with pd.ExcelWriter(template_io, engine='xlsxwriter') as writer:
+    template.to_excel(writer, index=False, sheet_name="Template")
+template_io.seek(0)
+
+st.download_button(
+    label="📥 Download Uploading Template",
+    data=template_io,
+    file_name="Palletization_Template.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
 
 if uploaded_file is not None:
     try:
