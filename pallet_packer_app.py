@@ -121,7 +121,7 @@ template = pd.DataFrame(columns=['FBA Code','# of Cartons','Length','Width','Hei
 
 template_io = BytesIO()
 with pd.ExcelWriter(template_io, engine='xlsxwriter') as writer:
-    template.to_excel(writer, index=False, sheet_name="Template")
+    template.to_excel(writer, index=False)
 template_io.seek(0)
 
 st.download_button(
