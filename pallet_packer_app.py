@@ -8,17 +8,29 @@ PALLET_LENGTH = 122
 PALLET_WIDTH = 102
 PALLET_HEIGHT = 194
 
+# --- Safe carton packing logic ---
 def calculate_cartons_per_layer(carton_L, carton_W):
+    try:
+        carton_L = float(carton_L)
+        carton_W = float(carton_W)
+        if carton_L <= 0 or carton_W <= 0:
+            return 0, (0, 0)
+    except (ValueError, TypeError):
+        return 0, (0, 0)
+
     orientations = [(carton_L, carton_W), (carton_W, carton_L)]
     max_count = 0
-    best_orientation = None
+    best_orientation = (0, 0)
     for l, w in orientations:
-        count_L = PALLET_LENGTH // l
-        count_W = PALLET_WIDTH // w
-        total = count_L * count_W
-        if total > max_count:
-            max_count = total
-            best_orientation = (l, w)
+        try:
+            count_L = PALLET_LENGTH // l
+            count_W = PALLET_WIDTH // w
+            total = count_L * count_W
+            if total > max_count:
+                max_count = total
+                best_orientation = (l, w)
+        except ZeroDivisionError:
+            continue
     return max_count, best_orientation
 
 def pack_fba_group(group_df):
@@ -101,8 +113,6 @@ def pack_all(df):
 
 def convert_to_excel(result):
     df_out = pd.DataFrame(result)
-
-    # Convert all columns to string to prevent type conversion issues
     df_out = df_out.astype(str)
 
     output = BytesIO()
@@ -117,8 +127,9 @@ st.title("📦 Palletization Tool (FBA Wise)")
 st.write("Upload an Excel or CSV file containing FBA carton data.")
 
 uploaded_file = st.file_uploader("Upload File", type=["xlsx", "csv"])
-template = pd.DataFrame(columns=['FBA Code','# of Cartons','Length','Width','Height'])
 
+# Provide a downloadable template
+template = pd.DataFrame(columns=['FBA Code', '# of Cartons', 'Length', 'Width', 'Height'])
 template_io = BytesIO()
 with pd.ExcelWriter(template_io, engine='xlsxwriter') as writer:
     template.to_excel(writer, index=False)
@@ -141,28 +152,29 @@ if uploaded_file is not None:
         # Clean column names
         df.columns = df.columns.str.strip()
 
-        # Convert FBA Code to string if exists
-        if 'FBA Code' in df.columns:
-            df['FBA Code'] = df['FBA Code'].astype(str)
-
-        # Ensure numeric columns are numeric
-        numeric_cols = ['# of Cartons', 'Length', 'Width', 'Height']
-        for col in numeric_cols:
-            df[col] = pd.to_numeric(df[col], errors='coerce')
-
-
-        st.success("File uploaded successfully!")
-        st.subheader("Preview of Uploaded Data")
-        st.dataframe(df.head())
-
+        # Ensure required columns are present
         required_columns = {'FBA Code', '# of Cartons', 'Length', 'Width', 'Height'}
-        if not required_columns.issubset(set(df.columns)):
-            st.error(f"Missing columns: {required_columns - set(df.columns)}")
+        if not required_columns.issubset(df.columns):
+            st.error(f"Missing required columns: {required_columns - set(df.columns)}")
         else:
+            # Type conversion
+            df['FBA Code'] = df['FBA Code'].astype(str)
+            for col in ['# of Cartons', 'Length', 'Width', 'Height']:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+
+            # Filter invalid rows
+            df = df.dropna(subset=['# of Cartons', 'Length', 'Width', 'Height'])
+            df = df[(df['# of Cartons'] > 0) & (df['Length'] > 0) & (df['Width'] > 0) & (df['Height'] > 0)]
+
+            st.success("File uploaded successfully!")
+            st.subheader("📋 Preview of Uploaded Data")
+            st.dataframe(df.head())
+
             result = pack_all(df)
+
             if result:
-                st.subheader("Palletization Summary")
-                result_df=pd.DataFrame(result)
+                st.subheader("📦 Palletization Summary")
+                result_df = pd.DataFrame(result)
                 result_df = result_df.astype(str)
                 st.dataframe(result_df)
 
@@ -175,6 +187,5 @@ if uploaded_file is not None:
                 )
             else:
                 st.warning("No cartons could be packed into pallets.")
-
     except Exception as e:
-        st.error(f"Error processing file: {e}")
+        st.error(f"❌ Error processing file: {e}")
